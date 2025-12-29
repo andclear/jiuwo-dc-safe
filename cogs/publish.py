@@ -13,18 +13,59 @@ from utils.metadata import create_metadata
 from utils.embed_builder import build_publish_embed, build_error_embed, build_success_embed
 
 
-class ManageView(discord.ui.View):
-    """发布者管理按钮视图"""
+class PersistentManageView(discord.ui.View):
+    """
+    持久化的发布者管理按钮视图
+    将 warehouse_message_id 和 uploader_id 编码到 custom_id 中
+    这样 Bot 重启后仍能处理按钮交互
+    """
 
-    def __init__(self, warehouse_message_id: int, uploader_id: int, embed_message_id: int):
+    def __init__(self, warehouse_message_id: int = 0, uploader_id: int = 0):
         super().__init__(timeout=None)
         self.warehouse_message_id = warehouse_message_id
         self.uploader_id = uploader_id
-        self.embed_message_id = embed_message_id
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # 动态创建带有元数据的按钮
+        if warehouse_message_id and uploader_id:
+            self._create_buttons()
+
+    def _create_buttons(self):
+        """创建带有编码 ID 的按钮"""
+        # 清除默认按钮
+        self.clear_items()
+
+        # 创建带编码 custom_id 的按钮
+        # 格式: action:warehouse_id:uploader_id
+        delete_btn = discord.ui.Button(
+            label="删除作品",
+            emoji="🗑️",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"manage:delete:{self.warehouse_message_id}:{self.uploader_id}",
+        )
+        delete_btn.callback = self.delete_callback
+        self.add_item(delete_btn)
+
+        pin_btn = discord.ui.Button(
+            label="标注/取消标注",
+            emoji="📌",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"manage:pin:{self.warehouse_message_id}:{self.uploader_id}",
+        )
+        pin_btn.callback = self.pin_callback
+        self.add_item(pin_btn)
+
+        update_btn = discord.ui.Button(
+            label="更新作品",
+            emoji="📝",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"manage:update:{self.warehouse_message_id}:{self.uploader_id}",
+        )
+        update_btn.callback = self.update_callback
+        self.add_item(update_btn)
+
+    async def _check_permission(self, interaction: discord.Interaction, uploader_id: int) -> bool:
         """检查是否为发布者本人"""
-        if interaction.user.id != self.uploader_id:
+        if interaction.user.id != uploader_id:
             await interaction.response.send_message(
                 embed=build_error_embed("只有发布者才能执行此操作"),
                 ephemeral=True,
@@ -32,23 +73,41 @@ class ManageView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="删除作品", emoji="🗑️", style=discord.ButtonStyle.danger, custom_id="delete_work")
-    async def delete_work(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """删除作品按钮"""
-        from cogs.manage import handle_delete_work
-        await handle_delete_work(interaction, self.warehouse_message_id)
+    async def delete_callback(self, interaction: discord.Interaction):
+        """删除作品回调"""
+        # 从 custom_id 解析参数
+        parts = interaction.data["custom_id"].split(":")
+        warehouse_id = int(parts[2])
+        uploader_id = int(parts[3])
 
-    @discord.ui.button(label="标注/取消标注", emoji="📌", style=discord.ButtonStyle.secondary, custom_id="toggle_pin")
-    async def toggle_pin(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """标注/取消标注按钮"""
+        if not await self._check_permission(interaction, uploader_id):
+            return
+
+        from cogs.manage import handle_delete_work
+        await handle_delete_work(interaction, warehouse_id)
+
+    async def pin_callback(self, interaction: discord.Interaction):
+        """标注回调"""
+        parts = interaction.data["custom_id"].split(":")
+        uploader_id = int(parts[3])
+
+        if not await self._check_permission(interaction, uploader_id):
+            return
+
         from cogs.manage import handle_toggle_pin
         await handle_toggle_pin(interaction)
 
-    @discord.ui.button(label="更新作品", emoji="📝", style=discord.ButtonStyle.primary, custom_id="update_work")
-    async def update_work(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """更新作品按钮"""
+    async def update_callback(self, interaction: discord.Interaction):
+        """更新作品回调"""
+        parts = interaction.data["custom_id"].split(":")
+        warehouse_id = int(parts[2])
+        uploader_id = int(parts[3])
+
+        if not await self._check_permission(interaction, uploader_id):
+            return
+
         from cogs.manage import handle_update_work
-        await handle_update_work(interaction, self.warehouse_message_id)
+        await handle_update_work(interaction, warehouse_id)
 
 
 class PublishSession:
@@ -273,15 +332,13 @@ class DownloadReqSelectView(discord.ui.View):
                 embed.add_field(name="📎 文件数量", value=f"{len(self.session.files)} 个", inline=True)
 
             # 创建管理按钮视图
-            view = ManageView(
+            view = PersistentManageView(
                 warehouse_message_id=warehouse_message.id,
                 uploader_id=self.session.user_id,
-                embed_message_id=0,
             )
 
             # 发送公开 Embed
             public_message = await self.channel.send(embed=embed, view=view)
-            view.embed_message_id = public_message.id
 
             # 更新原消息
             await interaction.edit_original_response(

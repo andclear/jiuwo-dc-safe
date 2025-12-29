@@ -137,12 +137,11 @@ class UpdateWorkModal(discord.ui.Modal, title="更新作品信息"):
             )
 
             # 创建新的管理按钮视图
-            from cogs.publish import ManageView
+            from cogs.publish import PersistentManageView
 
-            new_view = ManageView(
+            new_view = PersistentManageView(
                 warehouse_message_id=new_warehouse_message.id,
                 uploader_id=interaction.user.id,
-                embed_message_id=self.original_message.id,
             )
 
             # 编辑原公开消息

@@ -3,7 +3,36 @@ Discord 资源分发 Bot 核心类
 """
 
 import discord
+from discord import app_commands
 from discord.ext import commands
+
+from config import Config
+
+
+class PersistentViewHandler(discord.ui.View):
+    """
+    持久化视图处理器
+    用于处理 Bot 重启后的按钮交互
+    通过监听所有以 "manage:" 开头的 custom_id
+    """
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(custom_id="manage:delete:placeholder", style=discord.ButtonStyle.danger)
+    async def placeholder_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """占位符按钮，实际回调由 on_interaction 处理"""
+        pass
+
+    @discord.ui.button(custom_id="manage:pin:placeholder", style=discord.ButtonStyle.secondary)
+    async def placeholder_pin(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """占位符按钮，实际回调由 on_interaction 处理"""
+        pass
+
+    @discord.ui.button(custom_id="manage:update:placeholder", style=discord.ButtonStyle.primary)
+    async def placeholder_update(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """占位符按钮，实际回调由 on_interaction 处理"""
+        pass
 
 
 class ResourceBot(commands.Bot):
@@ -51,6 +80,26 @@ class ResourceBot(commands.Bot):
         await self.tree.sync()
         print("✅ 斜杠命令已同步")
 
+        # 添加重载频道白名单命令
+        @self.tree.command(name="重载配置", description="重新加载频道白名单配置（管理员）")
+        @app_commands.default_permissions(administrator=True)
+        async def reload_config(interaction: discord.Interaction):
+            """重载配置命令"""
+            count = Config.reload_channels()
+            if count > 0:
+                await interaction.response.send_message(
+                    f"✅ 已重新加载频道白名单，共 {count} 个频道",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    "✅ 已重新加载配置，当前未设置频道白名单（允许所有论坛频道）",
+                    ephemeral=True,
+                )
+
+        # 再次同步以包含新命令
+        await self.tree.sync()
+
     async def on_ready(self) -> None:
         """Bot 就绪事件"""
         print(f"🤖 Bot 已登录: {self.user}")
@@ -61,3 +110,60 @@ class ResourceBot(commands.Bot):
             print("⚠️ 警告: 无法找到仓库频道，请检查 WAREHOUSE_CHANNEL_ID 配置")
         else:
             print(f"📦 仓库频道: {self.warehouse_channel.name}")
+
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        """
+        处理所有交互事件
+        用于处理持久化按钮的回调
+        """
+        # 只处理组件交互（按钮、选择菜单等）
+        if interaction.type != discord.InteractionType.component:
+            return
+
+        custom_id = interaction.data.get("custom_id", "")
+
+        # 处理管理按钮
+        if custom_id.startswith("manage:"):
+            await self._handle_manage_button(interaction, custom_id)
+
+    async def _handle_manage_button(self, interaction: discord.Interaction, custom_id: str) -> None:
+        """处理管理按钮交互"""
+        try:
+            parts = custom_id.split(":")
+            if len(parts) < 4:
+                return
+
+            action = parts[1]
+            warehouse_id = int(parts[2])
+            uploader_id = int(parts[3])
+
+            # 权限检查
+            if interaction.user.id != uploader_id:
+                from utils.embed_builder import build_error_embed
+                await interaction.response.send_message(
+                    embed=build_error_embed("只有发布者才能执行此操作"),
+                    ephemeral=True,
+                )
+                return
+
+            # 根据动作类型分发
+            if action == "delete":
+                from cogs.manage import handle_delete_work
+                await handle_delete_work(interaction, warehouse_id)
+            elif action == "pin":
+                from cogs.manage import handle_toggle_pin
+                await handle_toggle_pin(interaction)
+            elif action == "update":
+                from cogs.manage import handle_update_work
+                await handle_update_work(interaction, warehouse_id)
+
+        except Exception as e:
+            print(f"❌ 处理管理按钮失败: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        f"操作失败: {str(e)}",
+                        ephemeral=True,
+                    )
+            except Exception:
+                pass
