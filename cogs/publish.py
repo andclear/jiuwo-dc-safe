@@ -85,8 +85,8 @@ class PublishSession:
         self.user_id = user_id
         self.files = files
         self.title: str = ""
-        self.rule_repost: bool = True
-        self.rule_modify: bool = True
+        self.rule_repost: bool = False  # 默认禁止二传
+        self.rule_modify: bool = True   # 默认允许二改
         self.dl_req: str = "自由下载"
         self.passcode: str | None = None
 
@@ -133,19 +133,19 @@ class RulesSelectView(discord.ui.View):
         self.bot = bot
         self.channel = channel
 
-    @discord.ui.button(label="允许二传", emoji="✅", style=discord.ButtonStyle.success, row=0)
+    # 二传默认禁止：禁止按钮初始选中
+    @discord.ui.button(label="允许二传", emoji="⬜", style=discord.ButtonStyle.secondary, row=0)
     async def allow_repost(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.session.rule_repost = True
         button.style = discord.ButtonStyle.success
         button.emoji = "✅"
-        # 更新另一个按钮
         for child in self.children:
             if isinstance(child, discord.ui.Button) and child.label == "禁止二传":
                 child.style = discord.ButtonStyle.secondary
                 child.emoji = "⬜"
         await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label="禁止二传", emoji="⬜", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="禁止二传", emoji="❌", style=discord.ButtonStyle.danger, row=0)
     async def deny_repost(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.session.rule_repost = False
         button.style = discord.ButtonStyle.danger
@@ -156,6 +156,7 @@ class RulesSelectView(discord.ui.View):
                 child.emoji = "⬜"
         await interaction.response.edit_message(view=self)
 
+    # 二改默认允许：允许按钮初始选中
     @discord.ui.button(label="允许二改", emoji="✅", style=discord.ButtonStyle.success, row=1)
     async def allow_modify(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.session.rule_modify = True

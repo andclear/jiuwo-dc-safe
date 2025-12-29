@@ -20,20 +20,20 @@ class Colors:
 
 # 下载要求样式映射
 DL_REQ_STYLES = {
-    "自由下载": {"emoji": "🆓", "text": "自由下载", "color": Colors.SUCCESS},
-    "互动": {"emoji": "💬", "text": "需先回应或回复帖子", "color": Colors.WARNING},
-    "提取码": {"emoji": "🔐", "text": "需要提取码", "color": Colors.INFO},
+    "自由下载": {"emoji": "🆓", "text": "自由下载", "desc": "可直接获取"},
+    "互动": {"emoji": "💬", "text": "互动", "desc": "需先对帖子首楼点赞(反应)或在帖内回复"},
+    "提取码": {"emoji": "🔐", "text": "提取码", "desc": "寻找作者在帖内贴出的的提取码"},
 }
 
 
-def get_rule_text(allowed: bool) -> str:
-    """获取规则文本"""
-    return "允许" if allowed else "禁止"
+def get_rule_icon(allowed: bool) -> str:
+    """获取规则 emoji 图标"""
+    return "✅" if allowed else "❌"
 
 
 def get_dl_req_style(dl_req_type: str) -> dict:
     """获取下载要求样式"""
-    return DL_REQ_STYLES.get(dl_req_type, {"emoji": "❓", "text": dl_req_type, "color": Colors.PRIMARY})
+    return DL_REQ_STYLES.get(dl_req_type, {"emoji": "❓", "text": dl_req_type, "desc": ""})
 
 
 def build_publish_embed(
@@ -41,41 +41,39 @@ def build_publish_embed(
     warehouse_message_id: int,
 ) -> discord.Embed:
     """
-    构建发布作品的 Embed（简洁版）
+    构建发布作品的 Embed（参考截图风格）
     """
-    repost = get_rule_text(metadata.rules.get("repost", False))
-    modify = get_rule_text(metadata.rules.get("modify", False))
+    # 默认：禁止二传、允许二改
+    repost_icon = get_rule_icon(metadata.rules.get("repost", False))
+    modify_icon = get_rule_icon(metadata.rules.get("modify", True))
     dl_style = get_dl_req_style(metadata.req.get("type", "自由下载"))
 
-    # 使用根据下载要求类型的颜色
+    # 构建描述内容（使用列表和缩进格式）
+    description = (
+        "请在此处交互获取本帖作品\n"
+        "或者直接发送 **/获取作品** 来使用命令获取\n\n"
+        
+        f"• **版权规则**\n"
+        f"> 　二传 {repost_icon}　　二改 {modify_icon}　　商用 ❌\n\n"
+        
+        f"• **下载门槛: {dl_style['text']}**\n"
+        f"> 　{dl_style['desc']}\n\n"
+        
+        "**Tips:**\n"
+        "> 如果出现了点击按钮后没有作品消息\n"
+        "> 可以滑到最下面后输入 **/获取作品** 来使用命令获取\n\n"
+        
+        "**作者专属交互**"
+    )
+
     embed = discord.Embed(
         title=f"📦 {metadata.title}",
-        color=dl_style["color"],
+        description=description,
+        color=Colors.PRIMARY,
     )
 
-    # 版权规则 - 简洁的行内格式
-    embed.add_field(
-        name="📜 版权规则",
-        value=f"二传 `{repost}` ・ 二改 `{modify}` ・ 商用 `禁止`",
-        inline=False,
-    )
-
-    # 下载门槛
-    embed.add_field(
-        name="� 下载门槛",
-        value=f"{dl_style['emoji']} {dl_style['text']}",
-        inline=False,
-    )
-
-    # 使用说明
-    embed.add_field(
-        name="💡 如何下载",
-        value="点击下方 **「下载作品」** 按钮获取链接",
-        inline=False,
-    )
-
-    # 设置 Footer
-    embed.set_footer(text=f"ID: {warehouse_message_id}")
+    # 设置 Footer（使用引用样式）
+    embed.set_footer(text=f"作品ID: {warehouse_message_id}")
 
     return embed
 
