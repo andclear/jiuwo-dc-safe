@@ -37,30 +37,43 @@ class PersistentManageView(discord.ui.View):
         # 清除默认按钮
         self.clear_items()
 
-        # 创建带编码 custom_id 的按钮
+        # ===== 第一行：所有用户可用的下载按钮 =====
+        download_btn = discord.ui.Button(
+            label="下载作品",
+            emoji="📥",
+            style=discord.ButtonStyle.success,
+            custom_id=f"manage:download:{self.warehouse_message_id}:{self.uploader_id}",
+            row=0,
+        )
+        self.add_item(download_btn)
+
+        # ===== 第二行：仅发布者可用的管理按钮 =====
         # 格式: manage:action:warehouse_id:uploader_id
         # 注意：不设置 callback，由 bot.py 的 on_interaction 统一处理
         delete_btn = discord.ui.Button(
-            label="删除作品",
+            label="删除",
             emoji="🗑️",
             style=discord.ButtonStyle.danger,
             custom_id=f"manage:delete:{self.warehouse_message_id}:{self.uploader_id}",
+            row=1,
         )
         self.add_item(delete_btn)
 
         pin_btn = discord.ui.Button(
-            label="标注/取消标注",
+            label="标注",
             emoji="📌",
             style=discord.ButtonStyle.secondary,
             custom_id=f"manage:pin:{self.warehouse_message_id}:{self.uploader_id}",
+            row=1,
         )
         self.add_item(pin_btn)
 
         update_btn = discord.ui.Button(
-            label="更新作品",
+            label="更新",
             emoji="📝",
             style=discord.ButtonStyle.primary,
             custom_id=f"manage:update:{self.warehouse_message_id}:{self.uploader_id}",
+            row=1,
         )
         self.add_item(update_btn)
 

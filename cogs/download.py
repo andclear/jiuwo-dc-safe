@@ -235,6 +235,120 @@ class PasscodeButtonView(discord.ui.View):
         )
         await interaction.response.send_modal(modal)
 
+async def handle_download_button(interaction: discord.Interaction, warehouse_id: int):
+    """
+    处理下载按钮点击
+    由 bot.py 的 on_interaction 调用
+    """
+    bot = interaction.client
+    channel = interaction.channel
+
+    # 获取仓库频道
+    warehouse_channel = bot.warehouse_channel
+    if warehouse_channel is None:
+        await interaction.response.send_message(
+            embed=build_error_embed("仓库频道配置错误，请联系管理员"),
+            ephemeral=True,
+        )
+        return
+
+    try:
+        # 读取仓库消息
+        warehouse_message = await warehouse_channel.fetch_message(warehouse_id)
+
+        # 解析元数据
+        metadata = parse_metadata(warehouse_message.content)
+        if metadata is None:
+            await interaction.response.send_message(
+                embed=build_error_embed("资源元数据解析失败"),
+                ephemeral=True,
+            )
+            return
+
+        # 获取附件 URL
+        if not warehouse_message.attachments:
+            await interaction.response.send_message(
+                embed=build_error_embed("资源文件不存在"),
+                ephemeral=True,
+            )
+            return
+
+        # 多文件支持：构建所有附件的下载信息
+        attachments = warehouse_message.attachments
+
+        # 根据下载要求进行鉴权
+        dl_req_type = metadata.req.get("type", "自由下载")
+
+        if dl_req_type == "自由下载":
+            # 直接发送下载链接
+            if len(attachments) == 1:
+                embed = build_download_embed(metadata.title, attachments[0].url)
+            else:
+                # 多文件
+                links = "\n".join([f"📎 [{att.filename}]({att.url})" for att in attachments])
+                embed = discord.Embed(
+                    title="📥 下载就绪",
+                    description=f"**{metadata.title}**\n\n{links}\n\n⏰ 链接有效期约 24 小时",
+                    color=0x3BA55C,
+                )
+                embed.set_footer(text="请遵守版权规则")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        elif dl_req_type == "互动":
+            # 检查用户是否有互动
+            if isinstance(channel, discord.Thread):
+                # 简化检查：检查用户是否在当前 Thread 有消息
+                has_interaction = False
+                async for message in channel.history(limit=200):
+                    if message.author.id == interaction.user.id:
+                        has_interaction = True
+                        break
+
+                if has_interaction:
+                    if len(attachments) == 1:
+                        embed = build_download_embed(metadata.title, attachments[0].url)
+                    else:
+                        links = "\n".join([f"📎 [{att.filename}]({att.url})" for att in attachments])
+                        embed = discord.Embed(
+                            title="📥 下载就绪",
+                            description=f"**{metadata.title}**\n\n{links}\n\n⏰ 链接有效期约 24 小时",
+                            color=0x3BA55C,
+                        )
+                        embed.set_footer(text="请遵守版权规则")
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                else:
+                    await interaction.response.send_message(
+                        embed=build_error_embed("需要先对帖子进行回应或回复才能下载"),
+                        ephemeral=True,
+                    )
+            else:
+                await interaction.response.send_message(
+                    embed=build_error_embed("此功能只能在帖子中使用"),
+                    ephemeral=True,
+                )
+
+        elif dl_req_type == "提取码":
+            # 弹出提取码验证 Modal
+            expected_code = metadata.req.get("code", "")
+            # 多文件时，使用第一个附件的 URL（或者可以在 Modal 中处理）
+            modal = PasscodeModal(
+                expected_code=expected_code,
+                attachment_url=attachments[0].url,
+                title=metadata.title,
+            )
+            await interaction.response.send_modal(modal)
+
+    except discord.NotFound:
+        await interaction.response.send_message(
+            embed=build_error_embed("资源已被删除或不存在"),
+            ephemeral=True,
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            embed=build_error_embed(f"获取失败: {str(e)}"),
+            ephemeral=True,
+        )
+
 
 async def setup(bot: commands.Bot):
     """加载 Cog"""

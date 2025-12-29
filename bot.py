@@ -153,7 +153,13 @@ class ResourceBot(commands.Bot):
             warehouse_id = int(parts[2])
             uploader_id = int(parts[3])
 
-            # 权限检查
+            # 下载按钮：所有用户可用，无需权限检查
+            if action == "download":
+                from cogs.download import handle_download_button
+                await handle_download_button(interaction, warehouse_id)
+                return
+
+            # 管理按钮：仅发布者可用，需要权限检查
             if interaction.user.id != uploader_id:
                 from utils.embed_builder import build_error_embed
                 await interaction.response.send_message(
