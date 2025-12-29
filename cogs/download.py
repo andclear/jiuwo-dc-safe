@@ -58,11 +58,19 @@ class DownloadCog(commands.Cog):
             if message.embeds:
                 for embed in message.embeds:
                     if embed.footer and embed.footer.text:
-                        if embed.footer.text.startswith("WarehouseID:"):
+                        footer_text = embed.footer.text
+                        # 支持多种 footer 格式
+                        if footer_text.startswith("WarehouseID:"):
                             try:
                                 warehouse_id = int(
-                                    embed.footer.text.replace("WarehouseID:", "").strip()
+                                    footer_text.replace("WarehouseID:", "").strip()
                                 )
+                                return warehouse_id
+                            except ValueError:
+                                continue
+                        elif footer_text.startswith("作品ID:") or footer_text.startswith("ID:"):
+                            try:
+                                warehouse_id = int(footer_text.split(":")[-1].strip())
                                 return warehouse_id
                             except ValueError:
                                 continue

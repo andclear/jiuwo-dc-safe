@@ -272,13 +272,23 @@ class ManageCog(commands.Cog):
                 continue
 
             footer_text = embed.footer.text
-            if not footer_text.startswith("作品ID:") and not footer_text.startswith("ID:"):
+            
+            # 支持多种 footer 格式
+            warehouse_id = None
+            if footer_text.startswith("WarehouseID:"):
+                try:
+                    warehouse_id = int(footer_text.replace("WarehouseID:", "").strip())
+                except ValueError:
+                    continue
+            elif footer_text.startswith("作品ID:") or footer_text.startswith("ID:"):
+                try:
+                    warehouse_id = int(footer_text.split(":")[-1].strip())
+                except ValueError:
+                    continue
+            else:
                 continue
-
-            # 解析 warehouse_id
-            try:
-                warehouse_id = int(footer_text.split(":")[-1].strip())
-            except ValueError:
+            
+            if warehouse_id is None:
                 continue
 
             # 获取仓库消息验证上传者
