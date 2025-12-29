@@ -80,26 +80,6 @@ class ResourceBot(commands.Bot):
         await self.tree.sync()
         print("✅ 斜杠命令已同步")
 
-        # 添加重载频道白名单命令
-        @self.tree.command(name="重载配置", description="重新加载频道白名单配置（管理员）")
-        @app_commands.default_permissions(administrator=True)
-        async def reload_config(interaction: discord.Interaction):
-            """重载配置命令"""
-            count = Config.reload_channels()
-            if count > 0:
-                await interaction.response.send_message(
-                    f"✅ 已重新加载频道白名单，共 {count} 个频道",
-                    ephemeral=True,
-                )
-            else:
-                await interaction.response.send_message(
-                    "✅ 已重新加载配置，当前未设置频道白名单（允许所有论坛频道）",
-                    ephemeral=True,
-                )
-
-        # 再次同步以包含新命令
-        await self.tree.sync()
-
     async def on_ready(self) -> None:
         """Bot 就绪事件"""
         print(f"🤖 Bot 已登录: {self.user}")
