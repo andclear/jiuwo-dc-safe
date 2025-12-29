@@ -83,6 +83,8 @@ class ResourceBot(commands.Bot):
         # 同步斜杠命令到指定服务器（立即生效）
         if Config.GUILD_ID:
             guild = discord.Object(id=Config.GUILD_ID)
+            # 先清除 Guild 的旧命令，避免重复
+            self.tree.clear_commands(guild=guild)
             # 复制全局命令到 Guild
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
