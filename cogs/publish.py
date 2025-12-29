@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from config import Config
 from utils.metadata import create_metadata
 from utils.embed_builder import build_publish_embed, build_error_embed, build_success_embed
 
@@ -356,6 +357,45 @@ class PublishCog(commands.Cog):
         file5: discord.Attachment | None = None,
     ):
         """发布作品命令 - 交互式流程"""
+        channel = interaction.channel
+
+        # ========== 权限检查 ==========
+
+        # 1. 检查是否在论坛帖子（Thread）中
+        if not isinstance(channel, discord.Thread):
+            await interaction.response.send_message(
+                embed=build_error_embed("此命令只能在论坛帖子中使用"),
+                ephemeral=True,
+            )
+            return
+
+        # 2. 检查是否是论坛频道的帖子
+        parent = channel.parent
+        if not isinstance(parent, discord.ForumChannel):
+            await interaction.response.send_message(
+                embed=build_error_embed("此命令只能在论坛类型的频道中使用"),
+                ephemeral=True,
+            )
+            return
+
+        # 3. 检查频道是否在白名单中
+        if not Config.is_channel_allowed(parent.id):
+            await interaction.response.send_message(
+                embed=build_error_embed("此频道未被授权使用发布命令"),
+                ephemeral=True,
+            )
+            return
+
+        # 4. 检查是否是帖子发布者（owner）
+        if channel.owner_id != interaction.user.id:
+            await interaction.response.send_message(
+                embed=build_error_embed("只有帖子发布者才能使用此命令"),
+                ephemeral=True,
+            )
+            return
+
+        # ========== 权限检查通过 ==========
+
         # 收集所有文件
         files = [file1]
         if file2:
