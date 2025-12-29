@@ -76,12 +76,14 @@ class ResourceBot(commands.Bot):
             except Exception as e:
                 print(f"❌ 加载模块失败 {cog}: {e}")
 
+        # 打印已注册的命令（调试用）
+        commands_list = [cmd.name for cmd in self.tree.get_commands()]
+        print(f"📝 已注册命令: {commands_list}")
+
         # 同步斜杠命令到指定服务器（立即生效）
         if Config.GUILD_ID:
             guild = discord.Object(id=Config.GUILD_ID)
-            # 先清除旧的全局命令缓存
-            self.tree.clear_commands(guild=None)
-            # 复制命令到 Guild
+            # 复制全局命令到 Guild
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
             print(f"✅ 斜杠命令已同步到服务器 {Config.GUILD_ID}")
