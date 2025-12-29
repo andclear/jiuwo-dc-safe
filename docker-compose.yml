@@ -1,0 +1,10 @@
+services:
+  discord-bot:
+    build: .
+    container_name: jiuwo-dc-safe
+    restart: unless-stopped
+    env_file:
+      - .env
+    # 可选：挂载配置文件以便热更新
+    # volumes:
+    #   - ./.env:/app/.env:ro

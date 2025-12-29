@@ -1,0 +1,241 @@
+"""
+模块 B：获取作品
+实现 /获取作品 斜杠命令
+"""
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+from utils.metadata import parse_metadata
+from utils.embed_builder import build_download_embed, build_error_embed
+
+
+class PasscodeModal(discord.ui.Modal, title="输入提取码"):
+    """提取码输入弹窗"""
+
+    passcode_input = discord.ui.TextInput(
+        label="提取码",
+        placeholder="请输入提取码",
+        required=True,
+        max_length=50,
+    )
+
+    def __init__(self, expected_code: str, attachment_url: str, title: str):
+        super().__init__()
+        self.expected_code = expected_code
+        self.attachment_url = attachment_url
+        self.resource_title = title
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """提交时验证提取码"""
+        if self.passcode_input.value == self.expected_code:
+            embed = build_download_embed(self.resource_title, self.attachment_url)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                embed=build_error_embed("提取码错误，请重试"),
+                ephemeral=True,
+            )
+
+
+class DownloadCog(commands.Cog):
+    """获取作品模块"""
+
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    async def find_warehouse_id_in_thread(
+        self, channel: discord.TextChannel | discord.Thread
+    ) -> int | None:
+        """
+        在当前 Thread 中查找包含 WarehouseID 的 Embed
+
+        Returns:
+            仓库消息 ID，未找到返回 None
+        """
+        async for message in channel.history(limit=100):
+            if message.embeds:
+                for embed in message.embeds:
+                    if embed.footer and embed.footer.text:
+                        if embed.footer.text.startswith("WarehouseID:"):
+                            try:
+                                warehouse_id = int(
+                                    embed.footer.text.replace("WarehouseID:", "").strip()
+                                )
+                                return warehouse_id
+                            except ValueError:
+                                continue
+        return None
+
+    async def check_user_interaction(
+        self,
+        user: discord.User | discord.Member,
+        thread: discord.Thread,
+    ) -> bool:
+        """
+        检查用户是否对帖子有互动（Reaction 或回复）
+
+        Args:
+            user: 用户
+            thread: 帖子 Thread
+
+        Returns:
+            是否有互动
+        """
+        # 获取首楼消息（Thread 的 starter_message）
+        try:
+            starter_message = await thread.parent.fetch_message(thread.id)
+
+            # 检查是否有 Reaction
+            for reaction in starter_message.reactions:
+                async for reactor in reaction.users():
+                    if reactor.id == user.id:
+                        return True
+        except Exception:
+            pass
+
+        # 检查是否在 Thread 中有回复
+        async for message in thread.history(limit=200):
+            if message.author.id == user.id:
+                return True
+
+        return False
+
+    @app_commands.command(name="获取作品", description="获取当前帖子的资源下载链接")
+    async def get_work(self, interaction: discord.Interaction):
+        """获取作品命令"""
+        await interaction.response.defer(ephemeral=True)
+
+        # 获取当前频道
+        channel = interaction.channel
+
+        # 查找 WarehouseID
+        warehouse_id = await self.find_warehouse_id_in_thread(channel)
+
+        if warehouse_id is None:
+            await interaction.followup.send(
+                embed=build_error_embed("当前帖子中未找到已发布的作品"),
+                ephemeral=True,
+            )
+            return
+
+        # 获取仓库频道
+        warehouse_channel = self.bot.warehouse_channel
+        if warehouse_channel is None:
+            await interaction.followup.send(
+                embed=build_error_embed("仓库频道配置错误，请联系管理员"),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            # 读取仓库消息
+            warehouse_message = await warehouse_channel.fetch_message(warehouse_id)
+
+            # 解析元数据
+            metadata = parse_metadata(warehouse_message.content)
+            if metadata is None:
+                await interaction.followup.send(
+                    embed=build_error_embed("资源元数据解析失败"),
+                    ephemeral=True,
+                )
+                return
+
+            # 获取附件 URL
+            if not warehouse_message.attachments:
+                await interaction.followup.send(
+                    embed=build_error_embed("资源文件不存在"),
+                    ephemeral=True,
+                )
+                return
+
+            attachment_url = warehouse_message.attachments[0].url
+
+            # 根据下载要求进行鉴权
+            dl_req_type = metadata.req.get("type", "自由下载")
+
+            if dl_req_type == "自由下载":
+                # 直接发送下载链接
+                embed = build_download_embed(metadata.title, attachment_url)
+                await interaction.followup.send(embed=embed, ephemeral=True)
+
+            elif dl_req_type == "互动":
+                # 检查用户是否有互动
+                if isinstance(channel, discord.Thread):
+                    has_interaction = await self.check_user_interaction(
+                        interaction.user, channel
+                    )
+                    if has_interaction:
+                        embed = build_download_embed(metadata.title, attachment_url)
+                        await interaction.followup.send(embed=embed, ephemeral=True)
+                    else:
+                        await interaction.followup.send(
+                            embed=build_error_embed(
+                                "需要先对帖子进行回应（Reaction）或回复才能下载"
+                            ),
+                            ephemeral=True,
+                        )
+                else:
+                    await interaction.followup.send(
+                        embed=build_error_embed("此命令只能在帖子（Thread）中使用"),
+                        ephemeral=True,
+                    )
+
+            elif dl_req_type == "提取码":
+                # 弹出提取码验证 Modal
+                expected_code = metadata.req.get("code", "")
+                modal = PasscodeModal(
+                    expected_code=expected_code,
+                    attachment_url=attachment_url,
+                    title=metadata.title,
+                )
+                # 注意：由于已经 defer 了，需要使用 followup 发送消息提示用户
+                # Modal 需要在原始响应中发送，这里我们改为发送一个按钮来触发 Modal
+                await interaction.followup.send(
+                    content="请点击下方按钮输入提取码：",
+                    view=PasscodeButtonView(
+                        expected_code=expected_code,
+                        attachment_url=attachment_url,
+                        title=metadata.title,
+                    ),
+                    ephemeral=True,
+                )
+
+        except discord.NotFound:
+            await interaction.followup.send(
+                embed=build_error_embed("资源已被删除或不存在"),
+                ephemeral=True,
+            )
+        except Exception as e:
+            await interaction.followup.send(
+                embed=build_error_embed(f"获取失败: {str(e)}"),
+                ephemeral=True,
+            )
+
+
+class PasscodeButtonView(discord.ui.View):
+    """提取码按钮视图"""
+
+    def __init__(self, expected_code: str, attachment_url: str, title: str):
+        super().__init__(timeout=300)  # 5分钟超时
+        self.expected_code = expected_code
+        self.attachment_url = attachment_url
+        self.resource_title = title
+
+    @discord.ui.button(label="输入提取码", emoji="🔐", style=discord.ButtonStyle.primary)
+    async def enter_passcode(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        """点击按钮弹出提取码 Modal"""
+        modal = PasscodeModal(
+            expected_code=self.expected_code,
+            attachment_url=self.attachment_url,
+            title=self.resource_title,
+        )
+        await interaction.response.send_modal(modal)
+
+
+async def setup(bot: commands.Bot):
+    """加载 Cog"""
+    await bot.add_cog(DownloadCog(bot))
