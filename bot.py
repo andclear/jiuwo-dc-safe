@@ -80,36 +80,52 @@ class ResourceBot(commands.Bot):
         await self.tree.sync()
         print("✅ 斜杠命令已同步")
 
-        # 添加重载频道白名单命令
-        @self.tree.command(name="重载配置", description="重新加载频道白名单配置（管理员）")
-        @app_commands.default_permissions(administrator=True)
-        async def reload_config(interaction: discord.Interaction):
-            """重载配置命令"""
-            count = Config.reload_channels()
-            if count > 0:
-                await interaction.response.send_message(
-                    f"✅ 已重新加载频道白名单，共 {count} 个频道",
-                    ephemeral=True,
-                )
-            else:
-                await interaction.response.send_message(
-                    "✅ 已重新加载配置，当前未设置频道白名单（允许所有论坛频道）",
-                    ephemeral=True,
-                )
-
-        # 再次同步以包含新命令
-        await self.tree.sync()
-
     async def on_ready(self) -> None:
         """Bot 就绪事件"""
-        print(f"🤖 Bot 已登录: {self.user}")
+        print()
+        print("=" * 50)
+        print("  Jiuwo-Discord-Safe-Bot 启动完成")
+        print("=" * 50)
+        print()
+
+        # Bot 基本信息
+        print(f"🤖 Bot 名称: {self.user.name}")
+        print(f"🆔 Bot ID: {self.user.id}")
         print(f"📦 仓库频道 ID: {self.warehouse_channel_id}")
 
         # 验证仓库频道
         if self.warehouse_channel is None:
-            print("⚠️ 警告: 无法找到仓库频道，请检查 WAREHOUSE_CHANNEL_ID 配置")
+            print("⚠️  警告: 无法找到仓库频道，请检查 WAREHOUSE_CHANNEL_ID 配置")
         else:
-            print(f"📦 仓库频道: {self.warehouse_channel.name}")
+            print(f"📦 仓库频道: #{self.warehouse_channel.name}")
+
+        print()
+
+        # 已加入的服务器列表
+        print(f"🌐 已加入 {len(self.guilds)} 个服务器:")
+        for guild in self.guilds:
+            print(f"   • {guild.name} (ID: {guild.id}, 成员: {guild.member_count})")
+
+        print()
+
+        # 频道白名单
+        from config import Config
+        if Config.ALLOWED_FORUM_CHANNELS:
+            print(f"📋 频道白名单 ({len(Config.ALLOWED_FORUM_CHANNELS)} 个):")
+            for ch_id in Config.ALLOWED_FORUM_CHANNELS:
+                channel = self.get_channel(ch_id)
+                if channel:
+                    print(f"   • #{channel.name} (ID: {ch_id})")
+                else:
+                    print(f"   • [未找到] (ID: {ch_id})")
+        else:
+            print("📋 频道白名单: 未配置 (允许所有论坛频道)")
+
+        print()
+        print("=" * 50)
+        print("  ✅ Bot 已就绪，等待用户交互...")
+        print("=" * 50)
+        print()
 
     async def on_interaction(self, interaction: discord.Interaction) -> None:
         """
