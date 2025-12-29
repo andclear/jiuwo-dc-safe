@@ -300,7 +300,7 @@ class ManageCog(commands.Cog):
                 warehouse_message = await warehouse_channel.fetch_message(warehouse_id)
                 metadata = parse_metadata(warehouse_message.content)
 
-                if metadata and metadata.uploader_id == user_id:
+                if metadata and metadata.uploader == user_id:
                     return (message, warehouse_id)
             except Exception:
                 continue

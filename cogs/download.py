@@ -159,13 +159,28 @@ class DownloadCog(commands.Cog):
                 return
 
             attachment_url = warehouse_message.attachments[0].url
+            attachments = warehouse_message.attachments  # 所有附件
+
+            # 构建多文件下载 Embed 的辅助函数
+            def build_multi_file_embed(title: str, attachments: list) -> discord.Embed:
+                if len(attachments) == 1:
+                    return build_download_embed(title, attachments[0].url)
+                else:
+                    links = "\n".join([f"📎 [{att.filename}]({att.url})" for att in attachments])
+                    embed = discord.Embed(
+                        title="📥 下载就绪",
+                        description=f"**{title}**\n\n{links}\n\n⏰ 链接有效期约 24 小时",
+                        color=0x3BA55C,
+                    )
+                    embed.set_footer(text="请遵守版权规则")
+                    return embed
 
             # 根据下载要求进行鉴权
             dl_req_type = metadata.req.get("type", "自由下载")
 
             if dl_req_type == "自由下载":
                 # 直接发送下载链接
-                embed = build_download_embed(metadata.title, attachment_url)
+                embed = build_multi_file_embed(metadata.title, attachments)
                 await interaction.followup.send(embed=embed, ephemeral=True)
 
             elif dl_req_type == "互动":
@@ -175,7 +190,7 @@ class DownloadCog(commands.Cog):
                         interaction.user, channel
                     )
                     if has_interaction:
-                        embed = build_download_embed(metadata.title, attachment_url)
+                        embed = build_multi_file_embed(metadata.title, attachments)
                         await interaction.followup.send(embed=embed, ephemeral=True)
                     else:
                         await interaction.followup.send(
@@ -193,18 +208,13 @@ class DownloadCog(commands.Cog):
             elif dl_req_type == "提取码":
                 # 弹出提取码验证 Modal
                 expected_code = metadata.req.get("code", "")
-                modal = PasscodeModal(
-                    expected_code=expected_code,
-                    attachment_url=attachment_url,
-                    title=metadata.title,
-                )
-                # 注意：由于已经 defer 了，需要使用 followup 发送消息提示用户
-                # Modal 需要在原始响应中发送，这里我们改为发送一个按钮来触发 Modal
+                # 多文件时，传递所有附件 URL
+                all_urls = "\n".join([att.url for att in attachments])
                 await interaction.followup.send(
                     content="请点击下方按钮输入提取码：",
                     view=PasscodeButtonView(
                         expected_code=expected_code,
-                        attachment_url=attachment_url,
+                        attachment_url=all_urls,
                         title=metadata.title,
                     ),
                     ephemeral=True,
