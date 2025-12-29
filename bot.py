@@ -76,23 +76,29 @@ class ResourceBot(commands.Bot):
             except Exception as e:
                 print(f"❌ 加载模块失败 {cog}: {e}")
 
-        # 打印已注册的命令（调试用）
-        commands_list = [cmd.name for cmd in self.tree.get_commands()]
-        print(f"📝 已注册命令: {commands_list}")
+        # 同步斜杠命令
+        await self.tree.sync()
+        print("✅ 斜杠命令已同步")
 
-        # 同步斜杠命令到指定服务器（立即生效）
-        if Config.GUILD_ID:
-            guild = discord.Object(id=Config.GUILD_ID)
-            # 先清除 Guild 的旧命令，避免重复
-            self.tree.clear_commands(guild=guild)
-            # 复制全局命令到 Guild
-            self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-            print(f"✅ 斜杠命令已同步到服务器 {Config.GUILD_ID}")
-        else:
-            # 未配置 GUILD_ID 时使用全局同步（最多需要 1 小时生效）
-            await self.tree.sync()
-            print("✅ 斜杠命令已全局同步（可能需要最多 1 小时生效）")
+        # 添加重载频道白名单命令
+        @self.tree.command(name="重载配置", description="重新加载频道白名单配置（管理员）")
+        @app_commands.default_permissions(administrator=True)
+        async def reload_config(interaction: discord.Interaction):
+            """重载配置命令"""
+            count = Config.reload_channels()
+            if count > 0:
+                await interaction.response.send_message(
+                    f"✅ 已重新加载频道白名单，共 {count} 个频道",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    "✅ 已重新加载配置，当前未设置频道白名单（允许所有论坛频道）",
+                    ephemeral=True,
+                )
+
+        # 再次同步以包含新命令
+        await self.tree.sync()
 
     async def on_ready(self) -> None:
         """Bot 就绪事件"""

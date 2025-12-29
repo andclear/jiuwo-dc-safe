@@ -24,9 +24,6 @@ class Config:
     # 仓库频道 ID（用于存储文件）
     WAREHOUSE_CHANNEL_ID: int = int(os.getenv("WAREHOUSE_CHANNEL_ID", "0"))
 
-    # 服务器 ID（用于快速同步斜杠命令）
-    GUILD_ID: int = int(os.getenv("GUILD_ID", "0"))
-
     # 允许使用 Bot 命令的论坛频道 ID 列表
     ALLOWED_FORUM_CHANNELS: list[int] = []
 
