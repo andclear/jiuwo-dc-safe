@@ -48,12 +48,12 @@ async def clear_commands():
             await tree.sync()
             print("✅ 全局命令已清除")
 
-            # 如果需要清除特定服务器的命令，取消注释以下代码：
-            # for guild in bot.guilds:
-            #     print(f"🔄 正在清除服务器 {guild.name} 的命令...")
-            #     tree.clear_commands(guild=guild)
-            #     await tree.sync(guild=guild)
-            #     print(f"✅ 服务器 {guild.name} 的命令已清除")
+            # 清除所有服务器的 Guild 命令
+            for guild in bot.guilds:
+                print(f"🔄 正在清除服务器 [{guild.name}] 的命令...")
+                tree.clear_commands(guild=guild)
+                await tree.sync(guild=guild)
+                print(f"✅ 服务器 [{guild.name}] 的命令已清除")
 
             print()
             print("=" * 50)
