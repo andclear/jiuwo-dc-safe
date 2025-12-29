@@ -269,4 +269,7 @@ class ManageCog(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """加载 Cog"""
-    await bot.add_cog(ManageCog(bot))
+    cog = ManageCog(bot)
+    await bot.add_cog(cog)
+    # 手动将 app_commands 添加到 tree
+    bot.tree.add_command(cog.reload_config)
