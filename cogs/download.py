@@ -93,15 +93,24 @@ class DownloadCog(commands.Cog):
         """
         # 获取首楼消息（Thread 的 starter_message）
         try:
-            starter_message = await thread.parent.fetch_message(thread.id)
+            # 方法1：直接使用 thread.starter_message（如果可用）
+            starter_message = thread.starter_message
+            if starter_message is None:
+                # 方法2：通过 API 获取首楼消息
+                starter_message = await thread.fetch_message(thread.id)
+                if starter_message is None:
+                    # 方法3：从父频道获取首楼消息
+                    if thread.starter_message_id:
+                        starter_message = await thread.parent.fetch_message(thread.starter_message_id)
+        except Exception:
+            starter_message = None
 
-            # 检查是否有 Reaction
+        # 检查是否有 Reaction
+        if starter_message:
             for reaction in starter_message.reactions:
                 async for reactor in reaction.users():
                     if reactor.id == user.id:
                         return True
-        except Exception:
-            pass
 
         # 检查是否在 Thread 中有回复
         async for message in thread.history(limit=200):
@@ -313,14 +322,11 @@ async def handle_download_button(interaction: discord.Interaction, warehouse_id:
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
         elif dl_req_type == "互动":
-            # 检查用户是否有互动
+            # 检查用户是否有互动（Reaction 或回复）
             if isinstance(channel, discord.Thread):
-                # 简化检查：检查用户是否在当前 Thread 有消息
-                has_interaction = False
-                async for message in channel.history(limit=200):
-                    if message.author.id == interaction.user.id:
-                        has_interaction = True
-                        break
+                has_interaction = await self.check_user_interaction(
+                    interaction.user, channel
+                )
 
                 if has_interaction:
                     if len(attachments) == 1:
@@ -336,7 +342,7 @@ async def handle_download_button(interaction: discord.Interaction, warehouse_id:
                     await interaction.response.send_message(embed=embed, ephemeral=True)
                 else:
                     await interaction.response.send_message(
-                        embed=build_error_embed("需要先对帖子进行回应或回复才能下载"),
+                        embed=build_error_embed("需要先对帖子【首楼】进行回应（Reaction）或回复才能下载"),
                         ephemeral=True,
                     )
             else:
